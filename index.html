@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" href="data:,">
-<title>自动化项目实施总计划看板</title>
+<title>自动化项目实施总计划看板（阁楼区·运营相撞专用版）</title>
 <style>
 /* ============================================================================
  * 自动化项目实施总计划看板 —— 内置样式
@@ -916,6 +916,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
       }
       var group;
       if (code === 'OB输送线') group = 'OB输送线';
+      else if (/阁楼/.test(code)) group = '阁楼输送线';
       else if (/^2\./.test(code)) group = '阁楼货架';
       else if (/^3\./.test(code)) group = '服务器与网络';
       else group = 'W2-3区域改造';
@@ -1424,13 +1425,18 @@ function renderRows() {
     html += '</div>';
   }
 
-  /* ② 施工项 */
+  /* ② 施工项（专用版：仅显示阁楼区且与运营相撞的施工项，其余隐藏） */
   if (showFlags.con) {
+    var conOnlyShow = function (t) {
+      return /阁楼/.test((t.code || '') + (t.label || '')) && !!t.conflict;
+    };
     var conCount = 0;
-    model.con.groups.forEach(function (g) { conCount += g.tasks.length; });
-    html += sectionHead('con', conCount + ' 项 · 条上数字为施工人数');
     model.con.groups.forEach(function (g) {
-      var tasks = g.tasks.filter(function (t) { return matches(t.label, t.code); });
+      conCount += g.tasks.filter(function (t) { return matches(t.label, t.code) && conOnlyShow(t); }).length;
+    });
+    html += sectionHead('con', conCount + ' 项 · 仅阁楼区且与运营相撞（其余施工项已隐藏）');
+    model.con.groups.forEach(function (g) {
+      var tasks = g.tasks.filter(function (t) { return matches(t.label, t.code) && conOnlyShow(t); });
       if (!tasks.length) return;
       html += groupRow(g.name);
       tasks.forEach(function (t) {
@@ -1689,7 +1695,7 @@ function renderLegend() {
 function updateSubtitle() {
   var s = '';
   if (model) {
-    s = '数据区间 ' + fmt(model.meta.startTs) + ' ~ ' + fmt(model.meta.endTs) + '（' + model.meta.year + ' 年）· ' + model.meta.dayCount + ' 天';
+    s = '【专用视图】②施工计划仅显示阁楼区且与运营相撞的施工项 · 数据区间 ' + fmt(model.meta.startTs) + ' ~ ' + fmt(model.meta.endTs) + '（' + model.meta.year + ' 年）· ' + model.meta.dayCount + ' 天';
   }
   $('subtitle').textContent = s;
 }
