@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <link rel="icon" href="data:,">
-<title>自动化项目实施总计划看板（阁楼区·运营相撞专用版）</title>
+<title>自动化项目实施总计划看板（时间轴全量版）</title>
 <style>
 /* ============================================================================
  * 自动化项目实施总计划看板 —— 内置样式
@@ -1425,18 +1425,13 @@ function renderRows() {
     html += '</div>';
   }
 
-  /* ② 施工项（专用版：仅显示阁楼区且与运营相撞的施工项，其余隐藏） */
+  /* ② 施工项（时间轴全量版：显示 Excel 中的全部施工项，相撞项仍带红色冲突标记） */
   if (showFlags.con) {
-    var conOnlyShow = function (t) {
-      return /阁楼/.test((t.code || '') + (t.label || '')) && !!t.conflict;
-    };
     var conCount = 0;
+    model.con.groups.forEach(function (g) { conCount += g.tasks.length; });
+    html += sectionHead('con', conCount + ' 项 · 条上数字为施工人数');
     model.con.groups.forEach(function (g) {
-      conCount += g.tasks.filter(function (t) { return matches(t.label, t.code) && conOnlyShow(t); }).length;
-    });
-    html += sectionHead('con', conCount + ' 项 · 仅阁楼区且与运营相撞（其余施工项已隐藏）');
-    model.con.groups.forEach(function (g) {
-      var tasks = g.tasks.filter(function (t) { return matches(t.label, t.code) && conOnlyShow(t); });
+      var tasks = g.tasks.filter(function (t) { return matches(t.label, t.code); });
       if (!tasks.length) return;
       html += groupRow(g.name);
       tasks.forEach(function (t) {
@@ -1695,7 +1690,7 @@ function renderLegend() {
 function updateSubtitle() {
   var s = '';
   if (model) {
-    s = '【专用视图】②施工计划仅显示阁楼区且与运营相撞的施工项 · 数据区间 ' + fmt(model.meta.startTs) + ' ~ ' + fmt(model.meta.endTs) + '（' + model.meta.year + ' 年）· ' + model.meta.dayCount + ' 天';
+    s = '数据区间 ' + fmt(model.meta.startTs) + ' ~ ' + fmt(model.meta.endTs) + '（' + model.meta.year + ' 年）· ' + model.meta.dayCount + ' 天 · 在线数据即时同步';
   }
   $('subtitle').textContent = s;
 }
@@ -1761,7 +1756,12 @@ function scrollToTask(elId) {
 function bindEvents() {
   // 文件加载
   function pick() { $('fileInput').click(); }
-  $('btnRefresh').addEventListener('click', pick);
+  $('btnRefresh').addEventListener('click', function () {
+    // 在线版：优先重新拉取 GitHub 最新 Excel（防缓存，管理员更新后立即生效）；失败则回退本地文件选择
+    if (window.__refreshOnline) {
+      window.__refreshOnline(function (ok) { if (!ok) pick(); });
+    } else { pick(); }
+  });
   $('btnLoad').addEventListener('click', pick);
   $('btnEmptyLoad').addEventListener('click', pick);
   $('fileInput').addEventListener('change', function (e) {
@@ -2479,30 +2479,40 @@ gid('ovReset').addEventListener('click', function () {
   ];
   var SYNCD = false;
 
+  /* 时间戳 + 禁用缓存：管理员更新 Excel 推送后，他人刷新/点击刷新即可立即拿到最新数据（只有管理员有仓库推送权限，数据只读共享） */
+  function remoteUrl(u) {
+    return u + (u.indexOf('?') >= 0 ? '&' : '?') + '_t=' + Date.now();
+  }
+
   function applyRemote(wb) {
-    if (!window.App || !window.__gantt) return;
+    if (!window.App || !window.__gantt) return false;
     try {
       var model = App.parseWorkbook(wb, DATA_NAME + '（GitHub 在线同步）');
       window.__gantt.applyModel(model);
       SYNCD = true;
       var s = document.getElementById('srcName');
       if (s) s.textContent = '数据源：' + DATA_NAME + ' · GitHub 在线同步 · ' + new Date().toLocaleString('zh-CN');
-    } catch (e) { console.warn('在线数据解析失败，使用内置快照', e); }
+      return true;
+    } catch (e) { console.warn('在线数据解析失败，使用内置快照', e); return false; }
   }
 
-  function tryFetch(i) {
-    if (i >= REMOTE_CANDIDATES.length) return;       // 全部失败 → 保持内置快照
-    fetch(REMOTE_CANDIDATES[i])
+  function tryFetch(i, onDone) {
+    if (i >= REMOTE_CANDIDATES.length) { if (onDone) onDone(false); return; }  // 全部失败 → 保持内置快照
+    fetch(remoteUrl(REMOTE_CANDIDATES[i]), { cache: 'no-store' })
       .then(function (r) {
         if (!r.ok) throw new Error('HTTP ' + r.status);
         return r.arrayBuffer();
       })
       .then(function (buf) {
         var wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
-        applyRemote(wb);
+        var ok = applyRemote(wb);
+        if (onDone) onDone(!!ok);
       })
-      .catch(function () { tryFetch(i + 1); });
+      .catch(function () { tryFetch(i + 1, onDone); });
   }
+
+  /* 暴露给页面按钮：点击"刷新数据源"时优先重新拉取远程最新 Excel，失败再回退本地文件 */
+  window.__refreshOnline = function (cb) { tryFetch(0, cb); };
 
   function boot() {
     // 等待核心脚本就绪（PREVIEW_DATA 在 DOM 中靠后执行，此处先尝试延迟启动）
