@@ -803,6 +803,11 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
     if (m) return new Date(+m[1], +m[2] - 1, +m[3]).getTime();
     m = s.match(/^(\d{1,2})[\/\-.](\d{1,2})$/);
     if (m) return new Date(year, +m[1] - 1, +m[2]).getTime();
+    // 兼容中文“年月日 / 月日”格式（如 2026年6月22日、6月22日）
+    m = s.match(/^(\d{4})年(\d{1,2})月(\d{1,2})日?$/);
+    if (m) return new Date(+m[1], +m[2] - 1, +m[3]).getTime();
+    m = s.match(/^(\d{1,2})月(\d{1,2})日?$/);
+    if (m) return new Date(year, +m[1] - 1, +m[2]).getTime();
     return null;
   }
 
